@@ -41,14 +41,19 @@ def exec_commands(commands):
           print("*** Errors")
           print(stderr.read())
 
+def usage():
+  print("use it like: $python main.py -h localhost -s path/to/save")
 
 
 
 # Parse arguments
-
-options, remainder = getopt.gnu_getopt(
-  sys.argv[1:], 'h:s:v', ["host=", "save=", "verbose", "version", "help", "stop",])
-
+try:
+  options, remainder = getopt.gnu_getopt(
+    sys.argv[1:], 'h:s:v', ["host=", "save=", "verbose", "version", "help", "stop",])
+except getopt.GetoptError as err:
+  print("*** " + str(err))
+  usage()
+  sys.exit(2)
 
 version = "0.5"
 verbose = False
