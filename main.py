@@ -13,7 +13,7 @@ import paramiko
 from paramiko.py3compat import input
 
 def exec_commands(commands):
-    for command in commands:
+    # for command in commands:
         print("*** {}".format(command))
         stdin, stdout, stderr = client.exec_command(command)
         print(stdout.read().decode())
@@ -23,7 +23,8 @@ def exec_commands(commands):
           print(stderr.read())
 
 def usage():
-  print("use it like: $python main.py -s path/to/save")
+  f = open("help.txt", "r")
+  print(f.read)
 
 
 
@@ -56,7 +57,7 @@ for opt, arg in options:
   elif opt in ("--stop"):
     stop_server = True
   elif opt in ("-h", "--help"):
-    print("print help here!")
+    usage()
     sys.exit(0)
 
 verboseprint = print if verbose else lambda *a, **k: None
@@ -90,7 +91,7 @@ droplet = digitalocean.Droplet(token=token,
                                 name='FactorioServer',
                                 region='fra1',
                                 image='docker-20-04', 
-                                size_slug='s-1vcpu-1gb',
+                                size_slug='s-1vcpu°°-1gb',
                                 ssh_keys=keys, #Add all keys
                                 backups=False)
 droplet.create()

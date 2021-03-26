@@ -1,0 +1,10 @@
+Usage: main.py [OPTION]... [DIRECTORY]
+Starts/stops a factorio server and copies the directory on the server.
+
+-s, --save		Specifies the folder that is copied to the server
+	--stops		Stops the server and copies the save folder from the server to local location
+	--verbose	Print status messages
+-v, --version	Print the version information and exit
+-h, --help		Print this help
+
+For more information look at https://github.com/Plukers/FactorioServerHandling
