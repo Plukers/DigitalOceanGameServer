@@ -13,7 +13,7 @@ import paramiko
 from paramiko.py3compat import input
 
 def exec_commands(commands):
-    # for command in commands:
+    for command in commands:
         print("*** {}".format(command))
         stdin, stdout, stderr = client.exec_command(command)
         print(stdout.read().decode())
@@ -91,7 +91,7 @@ droplet = digitalocean.Droplet(token=token,
                                 name='FactorioServer',
                                 region='fra1',
                                 image='docker-20-04', 
-                                size_slug='s-1vcpu°°-1gb',
+                                size_slug='s-1vcpu-1gb',
                                 ssh_keys=keys, #Add all keys
                                 backups=False)
 droplet.create()
