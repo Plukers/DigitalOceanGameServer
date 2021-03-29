@@ -65,8 +65,7 @@ verboseprint("OPTIONS    :", options)
 verboseprint("ARGV       :", sys.argv[1:])
 
 if(not save_file_path):
-  print("*** Path to save file required.")
-  sys.exit(1)
+  print("*** No save file provided. New save file will be created.")
 
 # get rsa key
 ssh_key_path = os.path.join(Path.home(), ".ssh", "id_ed25519")
@@ -154,12 +153,13 @@ try:
   ]
   exec_commands(commands)
 
-  sftp = client.open_sftp()
+  if(save_file_path):
+    sftp = client.open_sftp()
 
-  print("Copying save file {}".format(save_file_path))
-  sftp.put(save_file_path, os.path.join("/opt/factorio/saves", os.path.basename(save_file_path)))
+    print("Copying save file {}".format(save_file_path))
+    sftp.put(save_file_path, os.path.join("/opt/factorio/saves", os.path.basename(save_file_path)))
 
-  sftp.close()
+    sftp.close()
 
   commands = [
     "docker start factorio",
