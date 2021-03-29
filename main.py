@@ -78,10 +78,21 @@ if(not pw):
   pw = None
 pkey = paramiko.Ed25519Key.from_private_key_file(str(ssh_key_path), password=pw)
 
+token = "token here"
+
+if (stop_server):
+  print("*** Shutdown droplet...")
+
+  manager = digitalocean.Manager(token=token)
+
+  my_droplets = manager.get_all_droplets()
+  for i, v in enumerate(my_droplets):
+      v.destroy()
+
+  sys.exit(0)
+
 
 print("*** Creating droplet...")
-
-token = "token here"
 
 manager = digitalocean.Manager(token=token)
 keys = manager.get_all_sshkeys()
@@ -167,6 +178,8 @@ try:
   exec_commands(commands)
   
   client.close()
+
+  print("Server id: {}".format(hostname))
 
 except Exception as e:
     print("*** Caught exception: %s: %s" % (e.__class__, e))
