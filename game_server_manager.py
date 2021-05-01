@@ -103,7 +103,8 @@ class GameServerManager(GameServerAPI):
           (name, _, has_param, callback) = action
           if name == arg:
             if not has_param:
-              callback(self)
+              if getattr(args, arg):
+                callback(self)
             else:
               callback(self, getattr(args, arg))
 
