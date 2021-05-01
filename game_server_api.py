@@ -3,6 +3,11 @@ from abc import ABC, abstractmethod
 class GameServerAPI:
 
   @abstractmethod
+  def create_droplet(self, droplet_size: str) -> str:
+    """Creates a new droplet with the given size."""
+    pass
+
+  @abstractmethod
   def server_address(self) -> str:
     """Returns address of server."""
     pass

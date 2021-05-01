@@ -11,11 +11,6 @@ class Game:
     pass
 
   @abstractmethod
-  def droplet_size(self) -> str:
-    """Size configuration of the droplet, e.g. s-1vcpu-1gb"""
-    pass
-
-  @abstractmethod
   def supported_actions(self) -> list[tuple[str, str, bool, Callable]]:
     """
     Returns supported list of supported actions:
