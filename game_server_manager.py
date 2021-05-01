@@ -1,125 +1,97 @@
 import sys
 import argparse
 import os
+import getpass
 from pathlib import Path
 import paramiko
 from paramiko import SSHClient
 from paramiko.py3compat import input
+import digitalocean
 
 from game_server_api import GameServerAPI
 from game import Game
 
-class __IgnorePolicy(paramiko.MissingHostKeyPolicy):
+
+class IgnorePolicy(paramiko.MissingHostKeyPolicy):
   """
   Policy for logging a Python-style warning for an unknown host key, but
   accepting it. This is used by `.SSHClient`.
   """
 
   def missing_host_key(self, client, hostname, key):
-    print("Unknown {} host key for {}: {}".format(
-              key.get_name(), hostname, hexlify(key.get_fingerprint()).decode()
-          ))   
-
-def __create_ssh_client(hostname, port, username, pkey) -> SSHClient:
-    # now, connect and use paramiko Client to negotiate SSH2 across the connection
-    try:
-      client = paramiko.SSHClient()
-      client.load_system_host_keys()
-      client.set_missing_host_key_policy(__IgnorePolicy())
-      print("Connecting...")
-      try:
-          client.connect(
-              hostname,
-              port,
-              username,
-              pkey=pkey,
-          )
-      except Exception as e:
-          pw = getpass.getpass("Password for private key wrong?: ")
-          pkey = paramiko.Ed25519Key.from_private_key_file(str(ssh_key_path), password=pw)
-          client.connect(
-              hostname,
-              port,
-              username,
-              pkey=pkey,
-          )
-
-      return client
-    except Exception as e:
-      print("Caught exception: %s: %s" % (e.__class__, e))
-      try:
-          client.close()
-          pass
-      except:
-          pass
-      sys.exit(1)
+    print('Unknown {} host key for {}: {}'.format(
+        key.get_name(), hostname, hexlify(key.get_fingerprint()).decode()
+    ))
 
 class GameServerManager(GameServerAPI):
   serverName = None
   game = None
 
   client = None
+  hostname = None
   token = None
   pkey = None
 
-  def __init__(self, game : Game):
+  def __init__(self, game: Game):
     self.game = game
-    serverName = '{}Server'.format(game.name())
+    self.serverName = '{}Server'.format(game.name())
 
   def run(self):
     parser = argparse.ArgumentParser()
-    
 
     parser.add_argument('-t', '--token', nargs=1,
                         help='Digital Ocean API token.')
-    parser.add_argument('-k', '--key', 
-                        type=str, 
-                        default=os.path.join(Path.home(), ".ssh", "id_ed25519"), 
+    parser.add_argument('-k', '--key',
+                        type=str,
+                        default=os.path.join(
+                            Path.home(), '.ssh', 'id_ed25519'),
                         help='path to SSH key for server login. Defaults to ~/.ssh/id_ed25519')
 
     control_group = parser.add_mutually_exclusive_group(required=False)
 
-    control_group.add_argument('-l', '--list', action='store_true', help='lists running servers')  
-    control_group.add_argument('-s', '--shutdown', action='store_true', help='stops and deletes all running servers.')  
+    control_group.add_argument(
+        '-l', '--list', action='store_true', help='lists running servers')
+    control_group.add_argument(
+        '-s', '--shutdown', action='store_true', help='stops and deletes all running servers.')
 
     for action in self.game.supported_actions():
       (name, help, has_param, callback) = action
       if not has_param:
-        parser.add_argument('--' + name, action='store_true', help=help)  
+        parser.add_argument('--' + name, action='store_true', help=help)
       else:
         parser.add_argument('--' + name, help=help)
 
     args = parser.parse_args()
 
     if args.token is None:
-      print("Error: Digital Ocean API token required.")
+      print('Error: Digital Ocean API token required.')
       sys.exit(1)
-    
+
     self.token = args.token
 
     if args.key is not None:
       if(not os.path.exists(args.key)):
-        print("No {} key found for server login.".format(args.key))
+        print('No {} key found for server login.'.format(args.key))
         sys.exit(1)
 
       try:
         self.pkey = paramiko.Ed25519Key.from_private_key_file(args.key)
       except Exception:
-        pw = getpass.getpass("Password for key {}:")
+        pw = getpass.getpass('Password for key {}:')
         if(not pw):
           pw = None
-        self.pkey = paramiko.Ed25519Key.from_private_key_file(args.key, password=pw)
+        self.pkey = paramiko.Ed25519Key.from_private_key_file(
+            args.key, password=pw)
     else:
-      print("Error: SSH key for server login required.")
+      print('Error: SSH key for server login required.')
       sys.exit(1)
 
-    
     if args.list is not None and args.list:
       self.__list_server()
       sys.exit(0)
 
     if args.shutdown is not None and args.shutdown:
-      self__shutdown_server()
+      self.__shutdown_server()
       sys.exit(0)
 
     for arg in vars(args):
@@ -132,72 +104,175 @@ class GameServerManager(GameServerAPI):
             else:
               callback(self, getattr(args, arg))
 
-  def __list_server(self):
+  def __get_game_server_droplets(self):
     manager = digitalocean.Manager(token=self.token)
+    droplets = manager.get_all_droplets()
 
-    numFound = 0
+    return list(filter(lambda d: d.name == self.serverName, droplets))
 
-    my_droplets = manager.get_all_droplets()
-    for i, v in enumerate(my_droplets):
-      if(v.name == serverName):
-        numFound += 1
+  def __list_server(self):
+    game_server_droplets = self.__get_game_server_droplets()
 
-    pluralS = ""
-    if (numFound != 1):
-      pluralS = "s"
+    num = len(game_server_droplets)
 
-    print("Found {} {} server{}".format(numFound, game.name(), pluralS))
+    pluralS = ''
+    if (num != 1):
+      pluralS = 's'
+
+    print('Found {} {} server{}'.format(num, self.game.name(), pluralS))
 
   def __shutdown_server(self):
-    print("Destroying {} servers...".format(game.name()))
+    print('Destroying {} servers...'.format(self.game.name()))
+
+    game_server_droplets = self.__get_game_server_droplets()
+
+    num = len(game_server_droplets)
+
+    for gsd in game_server_droplets:
+        gsd.destroy()
+
+    pluralS = ''
+    if (num != 1):
+      pluralS = 's'
+
+    print('{} {} server{} destroyed'.format(num, self.game.name(), pluralS))
+
+  def __setup_client(self):
+    if self.client is not None:
+      return True
+
+    game_server_droplets = self.__get_game_server_droplets()
+    if len(game_server_droplets) == 0:
+      return False
+
+    self.hostname = game_server_droplets[0].ip_address
+
+    username = 'root'
+    port = 22
+
+    # now, connect and use paramiko Client to negotiate SSH2 across the connection
+    try:
+      self.client = paramiko.SSHClient()
+      self.client.load_system_host_keys()
+      self.client.set_missing_host_key_policy(IgnorePolicy())
+      print('Connecting...')
+      try:
+          self.client.connect(
+              self.hostname,
+              port,
+              username,
+              pkey=self.pkey,
+          )
+      except Exception as e:
+          pw = getpass.getpass('Password for private key wrong?: ')
+          self.pkey = paramiko.Ed25519Key.from_private_key_file(
+              str(self.pkey), password=pw)
+          self.client.connect(
+              self.hostname,
+              port,
+              username,
+              pkey=self.pkey,
+          )
+
+      return True
+    except Exception as e:
+      print('Caught exception: %s: %s' % (e.__class__, e))
+      try:
+          self.client.close()
+          pass
+      except:
+          pass
+      sys.exit(1)
+
+  def __client_guard(self):
+    if self.client is None and not self.__setup_client():
+      print('Error: No server available.')
+      sys.exit(1)
+
+  def create_droplet(self, droplet_size: str) -> str:
+    game_server_droplets = self.__get_game_server_droplets()
+    if len(game_server_droplets) > 0:
+      query = input('There exist already {} {} server. Continue with creation? [Y/n]'.format(
+          len(game_server_droplets), self.game.name()))
+      fl = query[0].lower()
+      if query != 'Y':
+          print('Aborting creation.')
+          sys.exit(0)
 
     manager = digitalocean.Manager(token=self.token)
+    keys = manager.get_all_sshkeys()
 
-    numDestroyed = 0
+    droplet = digitalocean.Droplet(token=self.token,
+                                   name=self.serverName,
+                                   region='fra1',
+                                   image='docker-20-04',
+                                   size_slug=droplet_size,
+                                   ssh_keys=keys,  # Add all keys
+                                   backups=False)
+    droplet.create()
 
-    my_droplets = manager.get_all_droplets()
-    for i, v in enumerate(my_droplets):
-      if(v.name == serverName):
-        v.destroy()
-        numDestroyed += 1
+    droplet_created = False
+    while not droplet_created:
+      for action in droplet.get_actions():
+          action.load()
+          if action.status == "completed":
+            droplet_created = True
+            break
+          if action.status == "errored":
+            print("Error when creating droplet.")
+            sys.exit(1)
 
-    pluralS = ""
-    if (numDestroyed != 1):
-      pluralS = "s"
-    
-    print("{} {} server{} destroyed".format(numDestroyed, game.name(), pluralS))
+    # Request all droplets and find recently created droplet
+    # We do this as the created droplet object is missing some information, e.g. ip address
+    found_droplet = False
+    droplets = manager.get_all_droplets()
+    for d in droplets:
+      if d.id == droplet.id:
+          droplet = d
+          found_droplet = True
 
-  def create_droplet(self, droplet_size: str) -> str:    
-    pass            
+    if(not found_droplet):
+      print("Error: Could not setup droplet.")
+      sys.exit(1)
+
+    self.hostname = droplet.ip_address
 
   def server_address(self) -> str:
-    return ""
+    self.__client_guard()
+    return self.hostname
 
   def exec_command(self, command: str):
-    print("*** {}".format(command))
+    self.__client_guard()
+
+    print('*** {}'.format(command))
     _, stdout, stderr = client.exec_command(command)
     print(stdout.read().decode())
     errors = stderr.read().decode()
     if errors:
-      print("*** Errors")
+      print('*** Errors')
       print(errors)
 
   def exec_commands(self, commands: list[str]):
+    self.__client_guard()
     for command in commands:
       self.exec_command(command)
 
   def upload(self, localFilePath: str, serverTargetPath: str):
-    sftp = client.open_sftp()
+    self.__client_guard()
 
-    print("*** Uploading {}".format(localFilePath))
+    sftp = self.client.open_sftp()
+
+    print('*** Uploading {}'.format(localFilePath))
     sftp.put(localFilePath, serverTargetPath)
 
     sftp.close()
 
   def download(self, serverTargetPath: str, localFilePath: str):
-    sftp = client.open_sftp()
+    self.__client_guard()
 
-    print("*** Downloading to {}".format(localFilePath))
+    sftp = self.client.open_sftp()
+
+    print('*** Downloading to {}'.format(localFilePath))
     sftp.get(serverTargetPath, localFilePath)
 
     sftp.close()
