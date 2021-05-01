@@ -19,7 +19,7 @@ class Minecraft(Game):
     gsmAPI.exec_command('docker run -e EULA=TRUE -d -it -p 25565:25565 -e EULA=TRUE itzg/minecraft-server')
 
   def actions_executed(self, gsmApi: GameServerAPI):
-    print("*** Minecraft server created: {}:25565".format(gsmApi.server_address()))
+    print("Minecraft server created: {}:25565".format(gsmApi.server_address()))
 
 gsm = GameServerManager(Minecraft())
 gsm.run()

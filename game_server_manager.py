@@ -6,6 +6,7 @@ from pathlib import Path
 import paramiko
 from paramiko import SSHClient
 from paramiko.py3compat import input
+from binascii import hexlify
 import digitalocean
 
 from game_server_api import GameServerAPI
@@ -19,9 +20,8 @@ class IgnorePolicy(paramiko.MissingHostKeyPolicy):
   """
 
   def missing_host_key(self, client, hostname, key):
-    print('Unknown {} host key for {}: {}'.format(
-        key.get_name(), hostname, hexlify(key.get_fingerprint()).decode()
-    ))
+    # We ignore this
+    pass
 
 class GameServerManager(GameServerAPI):
   serverName = None
@@ -30,6 +30,8 @@ class GameServerManager(GameServerAPI):
   client = None
   hostname = None
   token = None
+
+  pkey_path = None
   pkey = None
 
   def __init__(self, game: Game):
@@ -70,18 +72,19 @@ class GameServerManager(GameServerAPI):
     self.token = args.token
 
     if args.key is not None:
-      if(not os.path.exists(args.key)):
-        print('No {} key found for server login.'.format(args.key))
+      self.pkey_path = args.key
+      if(not os.path.exists(self.pkey_path)):
+        print('No {} key found for server login.'.format(self.pkey_path))
         sys.exit(1)
 
       try:
-        self.pkey = paramiko.Ed25519Key.from_private_key_file(args.key)
+        self.pkey = paramiko.Ed25519Key.from_private_key_file(self.pkey_path)
       except Exception:
         pw = getpass.getpass('Password for key {}:')
         if(not pw):
           pw = None
         self.pkey = paramiko.Ed25519Key.from_private_key_file(
-            args.key, password=pw)
+            self.pkey_path, password=pw)
     else:
       print('Error: SSH key for server login required.')
       sys.exit(1)
@@ -103,6 +106,8 @@ class GameServerManager(GameServerAPI):
               callback(self)
             else:
               callback(self, getattr(args, arg))
+
+    self.game.actions_executed(self)
 
   def __get_game_server_droplets(self):
     manager = digitalocean.Manager(token=self.token)
@@ -145,7 +150,7 @@ class GameServerManager(GameServerAPI):
     if len(game_server_droplets) == 0:
       return False
 
-    self.hostname = game_server_droplets[0].ip_address
+    self.hostname = game_server_droplets[-1].ip_address
 
     username = 'root'
     port = 22
@@ -166,7 +171,7 @@ class GameServerManager(GameServerAPI):
       except Exception as e:
           pw = getpass.getpass('Password for private key wrong?: ')
           self.pkey = paramiko.Ed25519Key.from_private_key_file(
-              str(self.pkey), password=pw)
+              str(self.pkey_path), password=pw)
           self.client.connect(
               self.hostname,
               port,
@@ -198,6 +203,8 @@ class GameServerManager(GameServerAPI):
       if query != 'Y':
           print('Aborting creation.')
           sys.exit(0)
+
+    print('Creating {} server...'.format(self.game.name()))
 
     manager = digitalocean.Manager(token=self.token)
     keys = manager.get_all_sshkeys()
@@ -245,7 +252,7 @@ class GameServerManager(GameServerAPI):
     self.__client_guard()
 
     print('*** {}'.format(command))
-    _, stdout, stderr = client.exec_command(command)
+    _, stdout, stderr = self.client.exec_command(command)
     print(stdout.read().decode())
     errors = stderr.read().decode()
     if errors:
