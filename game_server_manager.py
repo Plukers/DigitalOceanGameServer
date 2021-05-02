@@ -217,12 +217,17 @@ class GameServerManager(GameServerAPI):
                                    size_slug=droplet_size,
                                    ssh_keys=keys,  # Add all keys
                                    backups=False)
+
+    loading = ['\\', '-', '/', '|' ]
+    loading_inc = 0
     droplet.create()
 
     droplet_created = False
     while not droplet_created:
       for action in droplet.get_actions():
           action.load()
+          loading_inc += 1
+          print('loading... ', str(loading[loading_inc % 4]), end='\r')
           if action.status == "completed":
             droplet_created = True
             break
