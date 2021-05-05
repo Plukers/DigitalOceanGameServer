@@ -126,6 +126,8 @@ class GameServerManager(GameServerAPI):
       pluralS = 's'
 
     print('Found {} {} server{}'.format(num, self.game.name(), pluralS))
+    for server in game_server_droplets:
+      print('IP: {} NAME: {}'.format(server.ip_address, server.name))
 
   def __shutdown_server(self):
     print('Destroying {} servers...'.format(self.game.name()))
