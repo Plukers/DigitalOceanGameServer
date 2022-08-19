@@ -1,4 +1,5 @@
 \env
+\.venv
 token.txt
 \.vsCode
 \__pycache__
