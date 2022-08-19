@@ -2,6 +2,7 @@ import sys
 import argparse
 import os
 import getpass
+import time
 from pathlib import Path
 import paramiko
 from paramiko import SSHClient
@@ -229,6 +230,7 @@ class GameServerManager(GameServerAPI):
 
     droplet_created = False
     while not droplet_created:
+      time.sleep(1) # Sleep for 1 second
       for action in droplet.get_actions():
           action.load()
           loading_inc += 1
