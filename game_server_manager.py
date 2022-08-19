@@ -24,23 +24,24 @@ class IgnorePolicy(paramiko.MissingHostKeyPolicy):
     pass
 
 class GameServerManager(GameServerAPI):
-  serverName = None
   game = None
 
   client = None
   hostname = None
   token = None
+  name = None
 
   pkey_path = None
   pkey = None
 
   def __init__(self, game: Game):
     self.game = game
-    self.serverName = '{}Server'.format(game.name())
 
   def run(self):
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('-n', '--name', nargs=1,
+                        help='Name of the droplet.')
     parser.add_argument('-t', '--token', nargs=1,
                         help='Digital Ocean API token.')
     parser.add_argument('-k', '--key',
@@ -93,6 +94,12 @@ class GameServerManager(GameServerAPI):
       self.__list_server()
       sys.exit(0)
 
+    if args.name is None:
+      print('Error: Name is required.')
+      sys.exit(1)
+
+    self.name = args.name[0]
+
     if args.shutdown is not None and args.shutdown:
       self.__shutdown_server()
       sys.exit(0)
@@ -110,14 +117,21 @@ class GameServerManager(GameServerAPI):
 
     self.game.actions_executed(self)
 
-  def __get_game_server_droplets(self):
+  def __get_all_game_server_droplets(self):
     manager = digitalocean.Manager(token=self.token)
-    droplets = manager.get_all_droplets()
+    return manager.get_all_droplets()
 
-    return list(filter(lambda d: d.name == self.serverName, droplets))
+  def __get_game_server_droplet(self):
+    droplets = list(filter(lambda d: d.name == self.name, self.__get_all_game_server_droplets()))
+
+    if len(droplets) == 0:
+      print('Error: No droplet named {} found.'.format(self.name))
+      sys.exit(1)
+
+    return droplets[0]
 
   def __list_server(self):
-    game_server_droplets = self.__get_game_server_droplets()
+    game_server_droplets = self.__get_all_game_server_droplets()
 
     num = len(game_server_droplets)
 
@@ -125,35 +139,26 @@ class GameServerManager(GameServerAPI):
     if (num != 1):
       pluralS = 's'
 
-    print('Found {} {} server{}'.format(num, self.game.name(), pluralS))
+    print('Found {} {} server{}:'.format(num, self.game.name(), pluralS))
     for server in game_server_droplets:
-      print('IP: {} NAME: {}'.format(server.ip_address, server.name))
+      print('{} : {}'.format(server.name, server.ip_address))
 
   def __shutdown_server(self):
-    print('Destroying {} servers...'.format(self.game.name()))
+    print('Destroying {} server {}...'.format(self.game.name(), self.name))
 
-    game_server_droplets = self.__get_game_server_droplets()
+    game_server_droplet = self.__get_game_server_droplet()
 
-    num = len(game_server_droplets)
+    game_server_droplet.destroy()
 
-    for gsd in game_server_droplets:
-        gsd.destroy()
-
-    pluralS = ''
-    if (num != 1):
-      pluralS = 's'
-
-    print('{} {} server{} destroyed'.format(num, self.game.name(), pluralS))
+    print('{} server {} destroyed.'.format(self.game.name(), self.name))
 
   def __setup_client(self):
     if self.client is not None:
       return True
 
-    game_server_droplets = self.__get_game_server_droplets()
-    if len(game_server_droplets) == 0:
-      return False
+    game_server_droplet = self.__get_game_server_droplet()
 
-    self.hostname = game_server_droplets[-1].ip_address
+    self.hostname = game_server_droplet.ip_address
 
     username = 'root'
     port = 22
@@ -198,22 +203,20 @@ class GameServerManager(GameServerAPI):
       sys.exit(1)
 
   def create_droplet(self, droplet_size: str) -> str:
-    game_server_droplets = self.__get_game_server_droplets()
+    game_server_droplets = list(
+        filter(lambda d: d.name == self.name, self.__get_all_game_server_droplets()))
     if len(game_server_droplets) > 0:
-      query = input('There exist already {} {} server. Continue with creation? [Y/n]'.format(
-          len(game_server_droplets), self.game.name()))
-      fl = query[0].lower()
-      if query != 'Y':
-          print('Aborting creation.')
-          sys.exit(0)
+      print('There exist already {} {} server with the name {}.'.format(
+          len(game_server_droplets), self.game.name(), self.name))
+      sys.exit(1)
 
-    print('Creating {} server...'.format(self.game.name()))
+    print('Creating {} server: {}'.format(self.game.name(), self.name))
 
     manager = digitalocean.Manager(token=self.token)
     keys = manager.get_all_sshkeys()
 
     droplet = digitalocean.Droplet(token=self.token,
-                                   name=self.serverName,
+                                   name=self.name,
                                    region='fra1',
                                    image='docker-20-04',
                                    size_slug=droplet_size,
@@ -229,7 +232,7 @@ class GameServerManager(GameServerAPI):
       for action in droplet.get_actions():
           action.load()
           loading_inc += 1
-          print('loading... ', str(loading[loading_inc % 4]), end='\r')
+          print('Creating droplet... ', str(loading[loading_inc % 4]), end='\r')
           if action.status == "completed":
             droplet_created = True
             break
@@ -249,6 +252,10 @@ class GameServerManager(GameServerAPI):
     if(not found_droplet):
       print("Error: Could not setup droplet.")
       sys.exit(1)
+
+    tag = digitalocean.Tag(token=self.token, name=self.game.name())
+    tag.create() # create tag if not already created
+    tag.add_droplets([droplet.id])
 
     self.hostname = droplet.ip_address
 
